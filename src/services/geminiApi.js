@@ -4,7 +4,23 @@
  * on the server side. The key never lives in this client code.
  */
 
-import { VERTEX_API_BASE_URL } from '../utils/constants';
+import { VERTEX_PROXY_URL, VERTEX_PUBLISHER_PATH } from '../utils/constants';
+
+async function callVertex(path, body) {
+  const response = await fetch(VERTEX_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, body }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    let parsed = {};
+    try { parsed = JSON.parse(text); } catch { /* keep empty */ }
+    const message = parsed.error?.message || `API Error: ${response.status}`;
+    throw new Error(message);
+  }
+  return JSON.parse(text);
+}
 
 function buildRequestBody({ prompt, referenceImages = [], aspectRatio, quality }) {
   const parts = [];
@@ -73,22 +89,9 @@ export async function generateImage({
   aspectRatio,
   quality,
 }) {
-  const url = `${VERTEX_API_BASE_URL}/${model}:generateContent`;
+  const path = `${VERTEX_PUBLISHER_PATH}/${model}:generateContent`;
   const body = buildRequestBody({ prompt, referenceImages, aspectRatio, quality });
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.error?.message || `API Error: ${response.status}`;
-    throw new Error(message);
-  }
-
-  const data = await response.json();
+  const data = await callVertex(path, body);
   return parseResponse(data);
 }
 
@@ -98,15 +101,8 @@ export async function generateImage({
  *   import('/src/services/geminiApi.js').then(m => m.pingVertex().then(console.log).catch(e => console.error(e.message)))
  */
 export async function pingVertex(model = 'gemini-2.5-flash') {
-  const url = `${VERTEX_API_BASE_URL}/${model}:generateContent`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
-    }),
+  const path = `${VERTEX_PUBLISHER_PATH}/${model}:generateContent`;
+  return callVertex(path, {
+    contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
   });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`HTTP ${response.status}\n${text}`);
-  return JSON.parse(text);
 }

@@ -62,11 +62,11 @@ export const RESOLUTION_MAP = {
   '21:9': { '1K': '1344×576',    '2K': '2688×1152',   '4K': '5376×2304' },
 };
 
-// All Vertex AI calls go through our same-origin proxy at /api/vertex/*.
-// In dev, Vite forwards them and injects the key (see vite.config.js).
-// In prod (Vercel), api/vertex/[...path].js does the same on the server.
-// The API key never appears in the client bundle.
-export const VERTEX_API_BASE_URL = '/api/vertex/v1/publishers/google/models';
+// All Vertex AI calls go through our same-origin proxy at /api/vertex.
+// The proxy reads { path, body } from JSON, forwards to aiplatform.googleapis.com,
+// and injects the API key server-side. The key never appears in the client bundle.
+export const VERTEX_PROXY_URL = '/api/vertex';
+export const VERTEX_PUBLISHER_PATH = '/v1/publishers/google/models';
 
 export const MAX_REFERENCE_IMAGES = 14;
 
