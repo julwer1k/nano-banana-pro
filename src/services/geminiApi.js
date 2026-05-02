@@ -22,32 +22,25 @@ async function callVertex(path, body) {
   return JSON.parse(text);
 }
 
-// Ordinal labels so the prompt can refer to "First Image", "Second Image", etc.
-// Gemini image models pay more attention to whichever modality comes last, and
-// labelling each image grounds those textual references to the right input.
-const ORDINALS = [
-  'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh',
-  'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth', 'Thirteenth', 'Fourteenth',
-];
-
 function buildRequestBody({ prompt, referenceImages = [], aspectRatio, quality }) {
+  // Match Google's official Python example exactly: text first, then images
+  // passed sequentially with no per-image labels. The model binds "Image 1",
+  // "Image 2" etc. by ordinal position in the list. Adding text labels between
+  // images empirically degrades output on Gemini 3 Pro Image.
+  // See: https://ai.google.dev/gemini-api/docs/image-generation
   const parts = [];
 
-  // Images first, each preceded by a label. Putting them ahead of the
-  // instruction keeps the prompt as the most recent (highest-weight) signal.
-  referenceImages.forEach((img, i) => {
-    const label = ORDINALS[i] || `Image ${i + 1}`;
-    parts.push({ text: `${label} Image:` });
+  if (prompt) {
+    parts.push({ text: prompt });
+  }
+
+  for (const img of referenceImages) {
     parts.push({
       inlineData: {
         mimeType: img.mimeType,
         data: img.base64,
       },
     });
-  });
-
-  if (prompt) {
-    parts.push({ text: prompt });
   }
 
   const body = {
@@ -107,14 +100,38 @@ export async function generateImage({
   return parseResponse(data);
 }
 
-/**
- * Diagnostic: pings a known-available model to verify the proxy + server key work.
- * Run from the browser console:
- *   import('/src/services/geminiApi.js').then(m => m.pingVertex().then(console.log).catch(e => console.error(e.message)))
- */
 export async function pingVertex(model = 'gemini-2.5-flash') {
   const path = `${VERTEX_PUBLISHER_PATH}/${model}:generateContent`;
   return callVertex(path, {
     contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
   });
+}
+
+/**
+ * Rewrites the user's prompt into the prose style Nano Banana actually responds
+ * to. Technical SYSTEM:/MODE:/TASK: tagged prompts hurt output on Gemini 3 Pro
+ * Image because the model expects natural language ("talk to it like a human
+ * artist briefing", per Google's prompting guide). This mirrors the invisible
+ * preprocessing AI Studio's web UI does before calling the image model.
+ */
+export async function enhancePrompt(rawPrompt, { hasReferences = false } = {}) {
+  if (!rawPrompt?.trim()) return rawPrompt;
+
+  const sys = hasReferences
+    ? 'You rewrite image-generation prompts for Google\'s Nano Banana (Gemini 3 Pro Image / 3.1 Flash Image). The user is also uploading reference images, so when they say "First Image" / "Second Image" / "Image 1" etc., those refer to those uploads — keep those references intact. Convert any technical / SYSTEM:/MODE:/TASK: style instructions into one cohesive prose paragraph as if briefing a human photographer. Preserve every concrete detail (lighting cues, pose, biology, skin texture, eye geometry, hair physics, framing, negative constraints). End with the aspect ratio if mentioned. Output only the rewritten prompt — no preface, no commentary.'
+    : 'You rewrite image-generation prompts for Google\'s Nano Banana (Gemini 3 Pro Image / 3.1 Flash Image). Convert any technical / SYSTEM:/MODE:/TASK: style instructions into one cohesive prose paragraph as if briefing a human photographer. Preserve every concrete detail (subject, lighting, pose, framing, style, negative constraints). End with the aspect ratio if mentioned. Output only the rewritten prompt — no preface, no commentary.';
+
+  const path = `${VERTEX_PUBLISHER_PATH}/gemini-2.5-flash:generateContent`;
+  const data = await callVertex(path, {
+    contents: [{ role: 'user', parts: [{ text: rawPrompt }] }],
+    systemInstruction: { parts: [{ text: sys }] },
+  });
+
+  const out = data?.candidates?.[0]?.content?.parts
+    ?.filter((p) => p.text)
+    .map((p) => p.text)
+    .join('')
+    .trim();
+
+  return out || rawPrompt;
 }
