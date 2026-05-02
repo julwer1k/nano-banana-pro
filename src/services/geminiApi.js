@@ -114,11 +114,26 @@ export async function pingVertex(model = 'gemini-2.5-flash') {
  * artist briefing", per Google's prompting guide). This mirrors the invisible
  * preprocessing AI Studio's web UI does before calling the image model.
  */
-export async function enhancePrompt(rawPrompt, { hasReferences = false } = {}) {
+const ORDINALS = [
+  'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh',
+  'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth', 'Thirteenth', 'Fourteenth',
+];
+
+function buildReferenceLabelHint(referenceCount) {
+  if (referenceCount <= 0) return '';
+  const ordinalLabels = ORDINALS.slice(0, referenceCount).map((o) => `"${o} Image"`).join(' / ');
+  const numericLabels = Array.from({ length: referenceCount }, (_, i) => `"Image ${i + 1}"`).join(' / ');
+  return `The user is uploading ${referenceCount} reference image${referenceCount > 1 ? 's' : ''} (positions 1..${referenceCount}). When the prompt says ${ordinalLabels}, or ${numericLabels}, those refer to those uploads by ordinal position — keep every such reference intact, do not collapse, drop, or renumber them, and do not invent positions beyond ${referenceCount}.`;
+}
+
+export async function enhancePrompt(rawPrompt, { hasReferences = false, referenceCount = 0 } = {}) {
   if (!rawPrompt?.trim()) return rawPrompt;
 
-  const sys = hasReferences
-    ? 'You rewrite image-generation prompts for Google\'s Nano Banana (Gemini 3 Pro Image / 3.1 Flash Image). The user is also uploading reference images, so when they say "First Image" / "Second Image" / "Image 1" etc., those refer to those uploads — keep those references intact. Convert any technical / SYSTEM:/MODE:/TASK: style instructions into one cohesive prose paragraph as if briefing a human photographer. Preserve every concrete detail (lighting cues, pose, biology, skin texture, eye geometry, hair physics, framing, negative constraints). End with the aspect ratio if mentioned. Output only the rewritten prompt — no preface, no commentary.'
+  // Back-compat: if caller only passed hasReferences, assume at least 1.
+  const refCount = referenceCount > 0 ? referenceCount : (hasReferences ? 1 : 0);
+
+  const sys = refCount > 0
+    ? `You rewrite image-generation prompts for Google's Nano Banana (Gemini 3 Pro Image / 3.1 Flash Image). ${buildReferenceLabelHint(refCount)} Convert any technical / SYSTEM:/MODE:/TASK: style instructions into one cohesive prose paragraph as if briefing a human photographer. Preserve every concrete detail (lighting cues, pose, biology, skin texture, eye geometry, hair physics, framing, negative constraints). End with the aspect ratio if mentioned. Output only the rewritten prompt — no preface, no commentary.`
     : 'You rewrite image-generation prompts for Google\'s Nano Banana (Gemini 3 Pro Image / 3.1 Flash Image). Convert any technical / SYSTEM:/MODE:/TASK: style instructions into one cohesive prose paragraph as if briefing a human photographer. Preserve every concrete detail (subject, lighting, pose, framing, style, negative constraints). End with the aspect ratio if mentioned. Output only the rewritten prompt — no preface, no commentary.';
 
   const path = `${VERTEX_PUBLISHER_PATH}/gemini-2.5-flash:generateContent`;

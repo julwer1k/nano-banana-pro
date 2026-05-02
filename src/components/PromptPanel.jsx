@@ -18,6 +18,7 @@ export default function PromptPanel() {
     try {
       const rewritten = await enhancePrompt(prompt, {
         hasReferences: referenceImages.length > 0,
+        referenceCount: referenceImages.length,
       });
       setPrompt(rewritten);
     } catch (err) {
