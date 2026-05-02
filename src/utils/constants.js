@@ -2,26 +2,29 @@
  * Application constants: model definitions, aspect ratios, quality/resolution mappings.
  */
 
-export const MODELS = [
-  {
-    id: 'gemini-3-pro-image-preview',
-    name: 'Nano Banana Pro',
-    description: 'Professional asset production, advanced reasoning',
-    badge: 'Pro',
-  },
-  {
-    id: 'gemini-3.1-flash-image-preview',
-    name: 'Nano Banana 2',
-    description: 'High-efficiency, optimized for speed',
-    badge: '2',
-  },
-  {
-    id: 'gemini-2.5-flash-image',
-    name: 'Nano Banana',
-    description: 'Speed and efficiency, low-latency',
-    badge: '⚡',
-  },
+const DEFAULT_MODELS = [
+  { id: 'gemini-3-pro-image-preview',     name: 'Nano Banana Pro', badge: 'Pro' },
+  { id: 'gemini-3.1-flash-image-preview', name: 'Nano Banana 2',   badge: '2' },
+  { id: 'gemini-2.5-flash-image',         name: 'Nano Banana',     badge: '⚡' },
 ];
+
+function parseModelsEnv(raw) {
+  if (!raw) return null;
+  const parsed = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [id, name, badge] = entry.split(':').map((s) => s?.trim());
+      if (!id) return null;
+      return { id, name: name || id, badge: badge || '' };
+    })
+    .filter(Boolean);
+  return parsed.length ? parsed : null;
+}
+
+export const MODELS =
+  parseModelsEnv(import.meta.env.VITE_VERTEX_MODELS) || DEFAULT_MODELS;
 
 export const ASPECT_RATIOS = [
   { value: '1:1',  label: '1:1',  icon: '⬜' },
@@ -59,7 +62,11 @@ export const RESOLUTION_MAP = {
   '21:9': { '1K': '1344×576',    '2K': '2688×1152',   '4K': '5376×2304' },
 };
 
-export const API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+// All Vertex AI calls go through our same-origin proxy at /api/vertex/*.
+// In dev, Vite forwards them and injects the key (see vite.config.js).
+// In prod (Vercel), api/vertex/[...path].js does the same on the server.
+// The API key never appears in the client bundle.
+export const VERTEX_API_BASE_URL = '/api/vertex/v1/publishers/google/models';
 
 export const MAX_REFERENCE_IMAGES = 14;
 

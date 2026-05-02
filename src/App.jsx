@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
-import useApiStore from './stores/useApiStore';
 import useGenerationStore from './stores/useGenerationStore';
 import useHistoryStore from './stores/useHistoryStore';
-import ApiKeyModal from './components/ApiKeyModal';
 import Header from './components/Header';
 import PromptPanel from './components/PromptPanel';
 import ImageUpload from './components/ImageUpload';
@@ -11,20 +9,14 @@ import GenerateButton from './components/GenerateButton';
 import ResultsGrid from './components/ResultsGrid';
 
 export default function App() {
-  const { isConnected } = useApiStore();
   const { error } = useGenerationStore();
   const { pruneExpired } = useHistoryStore();
 
-  // Prune expired history items on mount
   useEffect(() => {
     pruneExpired();
-    const interval = setInterval(pruneExpired, 5 * 60 * 1000); // Every 5 min
+    const interval = setInterval(pruneExpired, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [pruneExpired]);
-
-  if (!isConnected) {
-    return <ApiKeyModal />;
-  }
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">

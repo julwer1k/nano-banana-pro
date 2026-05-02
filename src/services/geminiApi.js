@@ -1,69 +1,47 @@
 /**
- * Gemini API service — handles image generation requests via REST.
- * Uses the generativelanguage.googleapis.com endpoint with API key auth.
+ * Vertex AI service — handles image generation requests via REST.
+ * Talks to a same-origin proxy (/api/vertex/*) that injects the API key
+ * on the server side. The key never lives in this client code.
  */
 
-import { API_BASE_URL } from '../utils/constants';
+import { VERTEX_API_BASE_URL } from '../utils/constants';
 
-/**
- * Builds the request body for the generateContent endpoint.
- * @param {Object} params
- * @param {string} params.prompt - Text prompt
- * @param {Array<{base64: string, mimeType: string}>} params.referenceImages - Reference images
- * @param {string} params.aspectRatio - e.g. "9:16"
- * @param {string} params.quality - e.g. "2K"
- * @returns {Object} Request body
- */
 function buildRequestBody({ prompt, referenceImages = [], aspectRatio, quality }) {
   const parts = [];
 
-  // Add text prompt
   if (prompt) {
     parts.push({ text: prompt });
   }
 
-  // Add reference images as inline data
   for (const img of referenceImages) {
     parts.push({
-      inline_data: {
-        mime_type: img.mimeType,
+      inlineData: {
+        mimeType: img.mimeType,
         data: img.base64,
       },
     });
   }
 
   const body = {
-    contents: [{ parts }],
+    contents: [{ role: 'user', parts }],
     generationConfig: {
       responseModalities: ['TEXT', 'IMAGE'],
     },
   };
 
-  // Add image config for aspect ratio and resolution
   if (aspectRatio || quality) {
     body.generationConfig.imageConfig = {};
-
-    if (aspectRatio) {
-      body.generationConfig.imageConfig.aspectRatio = aspectRatio;
-    }
-    if (quality) {
-      body.generationConfig.imageConfig.imageSize = quality;
-    }
+    if (aspectRatio) body.generationConfig.imageConfig.aspectRatio = aspectRatio;
+    if (quality) body.generationConfig.imageConfig.imageSize = quality;
   }
 
   return body;
 }
 
-/**
- * Parses the API response and extracts generated image data.
- * @param {Object} response - Raw API response JSON
- * @returns {{ image: string|null, text: string|null, mimeType: string }}
- */
 function parseResponse(response) {
   const result = { image: null, text: null, mimeType: 'image/png' };
 
   if (!response.candidates || response.candidates.length === 0) {
-    // Check for prompt feedback / blocking
     if (response.promptFeedback) {
       throw new Error(
         `Request blocked: ${response.promptFeedback.blockReason || 'Unknown reason'}`
@@ -75,7 +53,6 @@ function parseResponse(response) {
   const parts = response.candidates[0].content?.parts || [];
 
   for (const part of parts) {
-    // Skip thinking parts
     if (part.thought) continue;
 
     if (part.text) {
@@ -89,34 +66,19 @@ function parseResponse(response) {
   return result;
 }
 
-/**
- * Generates an image using the Gemini API.
- * @param {Object} params
- * @param {string} params.apiKey - Gemini API key
- * @param {string} params.model - Model identifier
- * @param {string} params.prompt - Text prompt
- * @param {Array} params.referenceImages - Reference images array
- * @param {string} params.aspectRatio - Aspect ratio
- * @param {string} params.quality - Quality/resolution
- * @returns {Promise<{image: string, text: string, mimeType: string}>}
- */
 export async function generateImage({
-  apiKey,
   model,
   prompt,
   referenceImages = [],
   aspectRatio,
   quality,
 }) {
-  const url = `${API_BASE_URL}/${model}:generateContent`;
+  const url = `${VERTEX_API_BASE_URL}/${model}:generateContent`;
   const body = buildRequestBody({ prompt, referenceImages, aspectRatio, quality });
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 
@@ -131,16 +93,20 @@ export async function generateImage({
 }
 
 /**
- * Validates an API key by making a lightweight models.list request.
- * @param {string} apiKey - Gemini API key to validate
- * @returns {Promise<boolean>}
+ * Diagnostic: pings a known-available model to verify the proxy + server key work.
+ * Run from the browser console:
+ *   import('/src/services/geminiApi.js').then(m => m.pingVertex().then(console.log).catch(e => console.error(e.message)))
  */
-export async function validateApiKey(apiKey) {
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const response = await fetch(url);
-    return response.ok;
-  } catch {
-    return false;
-  }
+export async function pingVertex(model = 'gemini-2.5-flash') {
+  const url = `${VERTEX_API_BASE_URL}/${model}:generateContent`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+    }),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`HTTP ${response.status}\n${text}`);
+  return JSON.parse(text);
 }

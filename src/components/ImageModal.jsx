@@ -3,14 +3,27 @@ import { createPortal } from 'react-dom';
 import { downloadImage } from '../utils/imageUtils';
 import { MODELS, RESOLUTION_MAP } from '../utils/constants';
 import useGenerationStore from '../stores/useGenerationStore';
+import useHistoryStore from '../stores/useHistoryStore';
 
 export default function ImageModal({ item, onClose }) {
   const { reuseFromHistory } = useGenerationStore();
+  const { getFullBlob } = useHistoryStore();
   const [copied, setCopied] = useState(false);
+  const [fullSrc, setFullSrc] = useState(item.resultThumbnail || '');
+  const [fullBlob, setFullBlob] = useState(null);
 
   const modelInfo = MODELS.find((m) => m.id === item.model) || MODELS[0];
   const resolution = RESOLUTION_MAP[item.aspectRatio]?.[item.quality] || '';
-  const fullSrc = `data:${item.resultMimeType || 'image/png'};base64,${item.resultImage}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    getFullBlob(item.id).then((blob) => {
+      if (cancelled || !blob?.resultImage) return;
+      setFullBlob(blob);
+      setFullSrc(`data:${blob.resultMimeType || 'image/png'};base64,${blob.resultImage}`);
+    });
+    return () => { cancelled = true; };
+  }, [item.id, getFullBlob]);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -28,15 +41,16 @@ export default function ImageModal({ item, onClose }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleReuse = () => {
-    reuseFromHistory(item);
+  const handleReuse = async () => {
+    await reuseFromHistory(item);
     onClose();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDownload = () => {
+    if (!fullBlob?.resultImage) return;
     const ts = new Date(item.timestamp).toISOString().slice(0, 10);
-    downloadImage(item.resultImage, `1of1s-${ts}.png`, item.resultMimeType);
+    downloadImage(fullBlob.resultImage, `1of1s-${ts}.png`, fullBlob.resultMimeType);
   };
 
   return createPortal(

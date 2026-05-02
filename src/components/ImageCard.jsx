@@ -1,28 +1,32 @@
 import { useState } from 'react';
 import useGenerationStore from '../stores/useGenerationStore';
+import useHistoryStore from '../stores/useHistoryStore';
 import { downloadImage } from '../utils/imageUtils';
 import { MODELS, RESOLUTION_MAP } from '../utils/constants';
 
 export default function ImageCard({ item, onExpand }) {
   const { reuseFromHistory } = useGenerationStore();
+  const { getFullBlob } = useHistoryStore();
   const [isLoaded, setIsLoaded] = useState(false);
 
   const modelInfo = MODELS.find((m) => m.id === item.model) || MODELS[0];
   const resolution = RESOLUTION_MAP[item.aspectRatio]?.[item.quality] || '';
 
-  const handleReuse = (e) => {
+  const handleReuse = async (e) => {
     e.stopPropagation();
-    reuseFromHistory(item);
+    await reuseFromHistory(item);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDownload = (e) => {
+  const handleDownload = async (e) => {
     e.stopPropagation();
+    const blob = await getFullBlob(item.id);
+    if (!blob?.resultImage) return;
     const ts = new Date(item.timestamp).toISOString().slice(0, 10);
-    downloadImage(item.resultImage, `1of1s-${ts}-${item.id.slice(0, 6)}.png`, item.resultMimeType);
+    downloadImage(blob.resultImage, `1of1s-${ts}-${item.id.slice(0, 6)}.png`, blob.resultMimeType);
   };
 
-  const src = item.resultThumbnail || `data:${item.resultMimeType || 'image/png'};base64,${item.resultImage}`;
+  const src = item.resultThumbnail;
 
   return (
     <div onClick={() => onExpand(item)}

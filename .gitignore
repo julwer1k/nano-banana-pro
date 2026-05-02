@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Env files (contain credentials)
+.env
+.env.*
+!.env.example
+
+# Local Claude session/config
+.claude/
+
+# Vercel
+.vercel/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

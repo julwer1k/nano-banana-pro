@@ -1,11 +1,6 @@
-import useApiStore from '../stores/useApiStore';
 import useHistoryStore from '../stores/useHistoryStore';
 
-/**
- * Header — Top navigation bar with logo, brand, and action buttons.
- */
 export default function Header() {
-  const { clearApiKey } = useApiStore();
   const { items, clearAll } = useHistoryStore();
 
   return (
@@ -38,17 +33,6 @@ export default function Header() {
           </button>
         )}
 
-        <button
-          onClick={clearApiKey}
-          className="px-3 py-1.5 text-xs text-text-muted hover:text-error
-                     border border-transparent hover:border-error/20
-                     rounded-[var(--radius-sm)] transition-all duration-200 cursor-pointer"
-          title="Disconnect API key"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-          </svg>
-        </button>
       </div>
     </header>
   );

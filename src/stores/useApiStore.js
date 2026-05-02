@@ -1,42 +1,22 @@
 /**
- * API Key store — manages the Gemini API key state and persistence.
+ * API Key store — kept for legacy UI compatibility.
+ * In production the key lives server-side on Vercel (api/vertex/[...path].js).
+ * In dev the key is injected by the Vite proxy from VITE_VERTEX_API_KEY.
+ * Either way, the client never needs to hold a real key — so we mark
+ * the app as "connected" by default and skip the API-key modal.
  */
 
 import { create } from 'zustand';
-import { saveToStorage, loadFromStorage } from '../utils/storageUtils';
 
-const STORAGE_KEY = '1of1s-api-key';
-
-const useApiStore = create((set, get) => ({
-  apiKey: loadFromStorage(STORAGE_KEY) || '',
-  isConnected: !!loadFromStorage(STORAGE_KEY),
+const useApiStore = create((set) => ({
+  apiKey: '',
+  isConnected: true,
   isValidating: false,
   error: null,
 
-  /**
-   * Sets the API key and persists it.
-   */
-  setApiKey: (key) => {
-    saveToStorage(STORAGE_KEY, key);
-    set({ apiKey: key, isConnected: true, error: null });
-  },
-
-  /**
-   * Clears the API key from state and storage.
-   */
-  clearApiKey: () => {
-    localStorage.removeItem(STORAGE_KEY);
-    set({ apiKey: '', isConnected: false, error: null });
-  },
-
-  /**
-   * Sets the validation loading state.
-   */
+  setApiKey: (key) => set({ apiKey: key, isConnected: true, error: null }),
+  clearApiKey: () => set({ apiKey: '', isConnected: true, error: null }),
   setValidating: (isValidating) => set({ isValidating }),
-
-  /**
-   * Sets an error message.
-   */
   setError: (error) => set({ error }),
 }));
 

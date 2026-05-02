@@ -1,5 +1,4 @@
 import useGenerationStore from '../stores/useGenerationStore';
-import useApiStore from '../stores/useApiStore';
 import useHistoryStore from '../stores/useHistoryStore';
 import { generateImage } from '../services/geminiApi';
 import { generateId, createThumbnail } from '../utils/imageUtils';
@@ -15,7 +14,6 @@ export default function GenerateButton() {
     setGenerating, setPendingCards, setError,
   } = useGenerationStore();
 
-  const { apiKey } = useApiStore();
   const { addItem } = useHistoryStore();
 
   const canGenerate = prompt.trim().length > 0 && !isGenerating;
@@ -36,7 +34,8 @@ export default function GenerateButton() {
       mimeType: img.mimeType,
     }));
 
-    // Create thumbnail versions of reference images for history storage
+    // Create thumbnail versions of reference images for the lightweight grid index.
+    // We keep the full-resolution refs (with base64) in IDB so reuse rehydrates losslessly.
     const refThumbnails = await Promise.all(
       referenceImages.map(async (img) => ({
         id: img.id,
@@ -44,12 +43,18 @@ export default function GenerateButton() {
         preview: await createThumbnail(img.preview, 64),
       }))
     );
+    const refFulls = referenceImages.map((img) => ({
+      id: img.id,
+      name: img.name,
+      base64: img.base64,
+      mimeType: img.mimeType,
+      preview: img.preview,
+    }));
 
     // Fire N parallel requests
     const promises = pendingIds.map(async (pendingId) => {
       try {
         const result = await generateImage({
-          apiKey,
           model,
           prompt,
           referenceImages: refs,
@@ -62,17 +67,23 @@ export default function GenerateButton() {
           const thumbDataUrl = `data:${result.mimeType};base64,${result.image}`;
           const thumbnail = await createThumbnail(thumbDataUrl, 400);
 
-          addItem({
-            id: pendingId,
-            prompt,
-            model,
-            aspectRatio,
-            quality,
-            resultImage: result.image,
-            resultMimeType: result.mimeType,
-            resultThumbnail: thumbnail,
-            resultText: result.text,
-            referenceImages: refThumbnails,
+          await addItem({
+            indexEntry: {
+              id: pendingId,
+              prompt,
+              model,
+              aspectRatio,
+              quality,
+              resultMimeType: result.mimeType,
+              resultThumbnail: thumbnail,
+              resultText: result.text,
+              referenceImages: refThumbnails,
+            },
+            blob: {
+              resultImage: result.image,
+              resultMimeType: result.mimeType,
+              refImages: refFulls,
+            },
           });
         }
       } catch (err) {
