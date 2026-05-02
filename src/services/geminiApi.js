@@ -22,20 +22,32 @@ async function callVertex(path, body) {
   return JSON.parse(text);
 }
 
+// Ordinal labels so the prompt can refer to "First Image", "Second Image", etc.
+// Gemini image models pay more attention to whichever modality comes last, and
+// labelling each image grounds those textual references to the right input.
+const ORDINALS = [
+  'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh',
+  'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth', 'Thirteenth', 'Fourteenth',
+];
+
 function buildRequestBody({ prompt, referenceImages = [], aspectRatio, quality }) {
   const parts = [];
 
-  if (prompt) {
-    parts.push({ text: prompt });
-  }
-
-  for (const img of referenceImages) {
+  // Images first, each preceded by a label. Putting them ahead of the
+  // instruction keeps the prompt as the most recent (highest-weight) signal.
+  referenceImages.forEach((img, i) => {
+    const label = ORDINALS[i] || `Image ${i + 1}`;
+    parts.push({ text: `${label} Image:` });
     parts.push({
       inlineData: {
         mimeType: img.mimeType,
         data: img.base64,
       },
     });
+  });
+
+  if (prompt) {
+    parts.push({ text: prompt });
   }
 
   const body = {
