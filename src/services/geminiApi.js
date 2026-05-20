@@ -1,7 +1,12 @@
 /**
  * Vertex AI service — handles image generation requests via REST.
- * Talks to a same-origin proxy (/api/vertex/*) that injects the API key
+ * Talks to a same-origin proxy (/api/vertex) that injects the API key
  * on the server side. The key never lives in this client code.
+ *
+ * The proxy returns image responses as raw binary (Content-Type: image/*)
+ * to save ~33 % egress vs base64-in-JSON. We re-encode to base64 client-side
+ * because IndexedDB history and downloads still want a base64 string.
+ * Text-only responses (e.g. prompt enhancement) come back as JSON unchanged.
  */
 
 import { VERTEX_PROXY_URL, VERTEX_PUBLISHER_PATH } from '../utils/constants';
@@ -12,14 +17,50 @@ async function callVertex(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, body }),
   });
-  const text = await response.text();
+
+  const contentType = response.headers.get('content-type') || '';
+
   if (!response.ok) {
+    const text = await response.text();
     let parsed = {};
     try { parsed = JSON.parse(text); } catch { /* keep empty */ }
     const message = parsed.error?.message || `API Error: ${response.status}`;
     throw new Error(message);
   }
+
+  if (contentType.startsWith('image/')) {
+    const buf = await response.arrayBuffer();
+    const data = arrayBufferToBase64(buf);
+    const textHeader = response.headers.get('x-vertex-text');
+    const text = textHeader ? decodeBase64Utf8(textHeader) : null;
+    return { __binary: true, mimeType: contentType, data, text };
+  }
+
+  const text = await response.text();
   return JSON.parse(text);
+}
+
+// Chunked btoa: hands the encoder 32 KB at a time so very large 4K image
+// buffers don't blow the JS call stack when spread into String.fromCharCode.
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(b64) {
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch {
+    return null;
+  }
 }
 
 function buildRequestBody({ prompt, referenceImages = [], aspectRatio, quality }) {
@@ -60,6 +101,16 @@ function buildRequestBody({ prompt, referenceImages = [], aspectRatio, quality }
 }
 
 function parseResponse(response) {
+  // Binary path: proxy already unwrapped the image so we just relay it.
+  if (response?.__binary) {
+    if (!response.data) throw new Error('No image data in binary response');
+    return {
+      image: response.data,
+      text: response.text || null,
+      mimeType: response.mimeType || 'image/png',
+    };
+  }
+
   const result = { image: null, text: null, mimeType: 'image/png' };
 
   if (!response.candidates || response.candidates.length === 0) {

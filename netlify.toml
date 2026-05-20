@@ -1,0 +1,21 @@
+[build]
+  command = "vite build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Same-origin proxy: /api/vertex → bundled function.
+# Mirrors the Vercel route so the client config (VERTEX_PROXY_URL='/api/vertex')
+# stays identical across providers.
+[[redirects]]
+  from = "/api/vertex"
+  to = "/.netlify/functions/vertex"
+  status = 200
+  force = true
+
+# SPA fallback: every non-asset path serves index.html so the React router
+# (or direct deep-link refresh) doesn't 404. Listed last so it doesn't shadow
+# the function redirect above.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
