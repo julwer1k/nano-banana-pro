@@ -1,20 +1,15 @@
 [build]
   command = "vite build"
   publish = "dist"
-  functions = "netlify/functions"
+  edge_functions = "netlify/edge-functions"
 
-# Same-origin proxy: /api/vertex → bundled function.
-# Mirrors the Vercel route so the client config (VERTEX_PROXY_URL='/api/vertex')
-# stays identical across providers.
-[[redirects]]
-  from = "/api/vertex"
-  to = "/.netlify/functions/vertex"
-  status = 200
-  force = true
+# Routing for /api/vertex is declared inside the edge function itself
+# (`export const config = { path: '/api/vertex' }`), so no redirect needed
+# here. The edge runtime streams responses, which lets us return image
+# payloads larger than the 6 MB cap that Node Functions enforce.
 
-# SPA fallback: every non-asset path serves index.html so the React router
-# (or direct deep-link refresh) doesn't 404. Listed last so it doesn't shadow
-# the function redirect above.
+# SPA fallback: every non-asset path serves index.html so the React app
+# (or direct deep-link refresh) doesn't 404.
 [[redirects]]
   from = "/*"
   to = "/index.html"
